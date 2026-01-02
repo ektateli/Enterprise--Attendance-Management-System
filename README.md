@@ -1,20 +1,26 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# ChronoFlow Enterprise Setup Guide
 
-This contains everything you need to run your app locally.
+This project is a React-based Enterprise Attendance Management System.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1He044uOXhS92_w5dJTh8Al4P9Yv0W9W3
+## Local Deployment Instructions
 
-## Run Locally
+### 1. Simple Run (No Setup)
+If you have Node.js installed, simply run this in the project root:
+```bash
+npx serve
+```
+Then visit `http://localhost:3000` in your browser.
 
-**Prerequisites:**  Node.js
+### 2. Deployment to Real MySQL
+To move from `LocalStorage` to a real MySQL database:
+1.  **Database Setup**: Execute the provided `schema.sql` in your MySQL instance.
+2.  **API Integration**: Update `services/db.ts` to use `fetch()` calls instead of `localStorage`.
+3.  **Server**: Create a Node.js Express server using `mysql2` and `jsonwebtoken` to handle the backend routes.
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Project Structure
+- `index.html`: Entry point with Tailwind CSS and ESM imports.
+- `index.tsx`: React mounting logic.
+- `App.tsx`: Routing and Authentication flow.
+- `services/db.ts`: Data access layer (currently simulated via LocalStorage).
+- `pages/`: Contains Dashboard, Attendance, Admin, Reports, and Leave modules.
