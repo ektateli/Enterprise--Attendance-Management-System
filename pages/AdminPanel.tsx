@@ -1,17 +1,33 @@
 
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
-import { UserRole } from '../types';
+import { User, AttendanceRecord, LeaveRequest, UserRole } from '../types';
 
 const AdminPanel: React.FC = () => {
-  const users = useMemo(() => db.getUsers(), []);
-  const allAttendance = useMemo(() => db.getAttendance(), []);
+  const [users, setUsers] = useState<User[]>([]);
+  const [allAttendance, setAllAttendance] = useState<AttendanceRecord[]>([]);
+  const [pendingLeavesCount, setPendingLeavesCount] = useState(0);
 
-  const stats = [
+  // Fix: Handle asynchronous data loading in useEffect
+  useEffect(() => {
+    const loadData = async () => {
+      const [u, a, l] = await Promise.all([
+        db.getUsers(),
+        db.getAttendance(),
+        db.getLeaves()
+      ]);
+      setUsers(u);
+      setAllAttendance(a);
+      setPendingLeavesCount(l.filter(req => req.status === 'PENDING').length);
+    };
+    loadData();
+  }, []);
+
+  const stats = useMemo(() => [
     { label: 'Total Staff', count: users.length, icon: '👥' },
     { label: 'Present Today', count: allAttendance.filter(a => a.date === new Date().toISOString().split('T')[0]).length, icon: '📍' },
-    { label: 'Pending Leaves', count: db.getLeaves().filter(l => l.status === 'PENDING').length, icon: '⏳' },
-  ];
+    { label: 'Pending Leaves', count: pendingLeavesCount, icon: '⏳' },
+  ], [users.length, allAttendance, pendingLeavesCount]);
 
   return (
     <div className="p-8 space-y-8 animate-fadeIn">

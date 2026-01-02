@@ -1,13 +1,12 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole, LeaveRequest } from '../types';
 import { db } from '../services/db';
 
 const LeaveRequests: React.FC<{ user: User }> = ({ user }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [requests, setRequests] = useState<LeaveRequest[]>(
-    user.role === UserRole.EMPLOYEE ? db.getLeaves(user.id) : db.getLeaves()
-  );
+  const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
 
   // Form states
   const [type, setType] = useState<LeaveRequest['type']>('VACATION');
@@ -15,11 +14,23 @@ const LeaveRequests: React.FC<{ user: User }> = ({ user }) => {
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
 
-  const refreshData = () => {
-    setRequests(user.role === UserRole.EMPLOYEE ? db.getLeaves(user.id) : db.getLeaves());
+  // Fix: refreshData is now an async function
+  const refreshData = async () => {
+    const data = user.role === UserRole.EMPLOYEE ? await db.getLeaves(user.id) : await db.getLeaves();
+    setRequests(data);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Fix: Handle initial async data fetching in useEffect
+  useEffect(() => {
+    refreshData();
+    const fetchUsers = async () => {
+      const u = await db.getUsers();
+      setUsers(u);
+    };
+    fetchUsers();
+  }, [user.id, user.role]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newRequest: LeaveRequest = {
       id: `lr-${Math.random().toString(36).substr(2, 9)}`,
@@ -30,25 +41,26 @@ const LeaveRequests: React.FC<{ user: User }> = ({ user }) => {
       status: 'PENDING',
       reason
     };
-    db.saveLeave(newRequest);
+    await db.saveLeave(newRequest);
     setIsModalOpen(false);
-    refreshData();
+    await refreshData();
     // Reset form
     setStartDate('');
     setEndDate('');
     setReason('');
   };
 
-  const handleAction = (id: string, status: LeaveRequest['status']) => {
-    db.updateLeaveStatus(id, status);
-    refreshData();
+  const handleAction = async (id: string, status: LeaveRequest['status']) => {
+    await db.updateLeaveStatus(id, status);
+    await refreshData();
   };
 
+  // Fix: usersMap now depends on users state which is fetched asynchronously
   const usersMap = useMemo(() => {
     const m = new Map();
-    db.getUsers().forEach(u => m.set(u.id, u));
+    users.forEach(u => m.set(u.id, u));
     return m;
-  }, []);
+  }, [users]);
 
   return (
     <div className="p-8 space-y-8 animate-fadeIn">

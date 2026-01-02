@@ -1,7 +1,7 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { User, UserRole, AttendanceRecord } from '../types';
+import { User, UserRole, AttendanceRecord, LeaveRequest } from '../types';
 import { db } from '../services/db';
 
 const data = [
@@ -20,23 +20,44 @@ const trendData = [
 ];
 
 const Dashboard: React.FC<{ user: User }> = ({ user }) => {
-  const attendance = useMemo(() => db.getAttendance(user.id), [user.id]);
-  const leaves = useMemo(() => db.getLeaves(user.id), [user.id]);
+  // Fix: db calls return promises; using state to store fetched data
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [allAttendance, setAllAttendance] = useState<AttendanceRecord[]>([]);
+
+  // Fix: Handle async fetching inside useEffect
+  useEffect(() => {
+    const fetchData = async () => {
+      const [att, lvs, users, allAtt] = await Promise.all([
+        db.getAttendance(user.id),
+        db.getLeaves(user.id),
+        db.getUsers(),
+        db.getAttendance()
+      ]);
+      setAttendance(att);
+      setLeaves(lvs);
+      setAllUsers(users);
+      setAllAttendance(allAtt);
+    };
+    fetchData();
+  }, [user.id]);
   
-  // Aggregate data for Managers/Admins
-  const allUsers = useMemo(() => db.getUsers(), []);
-  const allAttendance = useMemo(() => db.getAttendance(), []);
-  const today = new Date().toISOString().split('T')[0];
-  const presentToday = allAttendance.filter(a => a.date === today && a.clockIn && !a.clockOut);
+  // Fix: Calculate today's presence based on fetched state
+  const presentToday = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return allAttendance.filter(a => a.date === today && a.clockIn && !a.clockOut);
+  }, [allAttendance]);
   
   const isPrivileged = user.role === UserRole.ADMIN || user.role === UserRole.MANAGER;
 
-  const stats = [
+  // Fix: Wrap stats in useMemo to handle data dependencies correctly
+  const stats = useMemo(() => [
     { label: isPrivileged ? 'Staff Present' : 'Days Present', value: isPrivileged ? presentToday.length : attendance.filter(a => a.status === 'PRESENT').length, icon: '✅', color: 'blue' },
     { label: isPrivileged ? 'Total Workforce' : 'Pending Leaves', value: isPrivileged ? allUsers.length : leaves.filter(l => l.status === 'PENDING').length, icon: isPrivileged ? '👥' : '🕒', color: 'amber' },
     { label: 'Leave Balance', value: '12', icon: '🏖️', color: 'emerald' },
     { label: 'Monthly Hours', value: '168', icon: '⏱️', color: 'indigo' },
-  ];
+  ], [isPrivileged, presentToday.length, attendance, allUsers.length, leaves]);
 
   return (
     <div className="p-8 space-y-8 animate-fadeIn">

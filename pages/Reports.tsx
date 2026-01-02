@@ -1,18 +1,34 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend 
 } from 'recharts';
 import { db } from '../services/db';
-import { UserRole } from '../types';
+import { User, AttendanceRecord, LeaveRequest, UserRole } from '../types';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
 const Reports: React.FC = () => {
-  const allAttendance = db.getAttendance();
-  const allUsers = db.getUsers();
-  const allLeaves = db.getLeaves();
+  // Fix: db calls return promises; using state to store fetched data
+  const [allAttendance, setAllAttendance] = useState<AttendanceRecord[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [allLeaves, setAllLeaves] = useState<LeaveRequest[]>([]);
+
+  // Fix: Handle async fetching inside useEffect
+  useEffect(() => {
+    const load = async () => {
+      const [att, usr, lve] = await Promise.all([
+        db.getAttendance(),
+        db.getUsers(),
+        db.getLeaves()
+      ]);
+      setAllAttendance(att);
+      setAllUsers(usr);
+      setAllLeaves(lve);
+    };
+    load();
+  }, []);
 
   const deptData = useMemo(() => {
     const counts: Record<string, number> = {};

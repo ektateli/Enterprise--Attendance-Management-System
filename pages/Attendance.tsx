@@ -9,23 +9,33 @@ const Attendance: React.FC<{ user: User }> = ({ user }) => {
   const [history, setHistory] = useState<AttendanceRecord[]>([]);
   const [viewMode, setViewMode] = useState<'PERSONAL' | 'WORKFORCE'>('PERSONAL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [allUsers, setAllUsers] = useState<User[]>([]);
 
   const isPrivileged = user.role === UserRole.ADMIN || user.role === UserRole.MANAGER;
-  const allUsers = useMemo(() => db.getUsers(), []);
+  
+  // Fix: usersMap now depends on allUsers state which is fetched asynchronously
   const usersMap = useMemo(() => {
     const map = new Map();
     allUsers.forEach(u => map.set(u.id, u));
     return map;
   }, [allUsers]);
 
+  // Fix: Corrected async behavior in useEffect
   useEffect(() => {
+    const loadInitialData = async () => {
+      const users = await db.getUsers();
+      setAllUsers(users);
+      const record = await db.getTodayRecord(user.id);
+      setTodayRecord(record);
+      await refreshHistory();
+    };
+
     const timer = setInterval(() => setTime(new Date()), 1000);
-    setTodayRecord(db.getTodayRecord(user.id));
-    refreshHistory();
+    loadInitialData();
     return () => clearInterval(timer);
   }, [user.id, viewMode]);
 
-  const handleClockIn = () => {
+  const handleClockIn = async () => {
     const record: AttendanceRecord = {
       id: Math.random().toString(36).substr(2, 9),
       userId: user.id,
@@ -34,23 +44,23 @@ const Attendance: React.FC<{ user: User }> = ({ user }) => {
       clockOut: null,
       status: 'PRESENT'
     };
-    db.saveAttendance(record);
+    await db.saveAttendance(record);
     setTodayRecord(record);
-    refreshHistory();
+    await refreshHistory();
   };
 
-  const handleClockOut = () => {
+  const handleClockOut = async () => {
     if (!todayRecord) return;
     const updated = { ...todayRecord, clockOut: new Date().toISOString() };
-    db.saveAttendance(updated);
+    await db.saveAttendance(updated);
     setTodayRecord(updated);
-    refreshHistory();
+    await refreshHistory();
   };
 
-  const refreshHistory = () => {
+  const refreshHistory = async () => {
     const data = viewMode === 'PERSONAL' 
-      ? db.getAttendance(user.id) 
-      : db.getAttendance();
+      ? await db.getAttendance(user.id) 
+      : await db.getAttendance();
     
     setHistory(data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   };

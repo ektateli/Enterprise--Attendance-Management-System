@@ -1,114 +1,102 @@
 
-import { User, AttendanceRecord, LeaveRequest, UserRole } from '../types';
-import { INITIAL_USERS, STORAGE_KEYS } from '../constants';
+import { User, AttendanceRecord, LeaveRequest } from '../types';
+
+const API_BASE = 'http://localhost:5000/api';
 
 class DatabaseService {
-  constructor() {
-    this.init();
-  }
-
-  private init() {
-    if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.ATTENDANCE)) {
-      localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify([]));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.LEAVES)) {
-      localStorage.setItem(STORAGE_KEYS.LEAVES, JSON.stringify([]));
-    }
+  private getAuthHeader() {
+    const token = localStorage.getItem('cf_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
   }
 
   // --- User Auth ---
   getCurrentUser(): User | null {
-    const user = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+    const user = localStorage.getItem('cf_current_user');
     return user ? JSON.parse(user) : null;
   }
 
-  setCurrentUser(user: User | null) {
+  setCurrentUser(user: User | null, token?: string) {
     if (user) {
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+      localStorage.setItem('cf_current_user', JSON.stringify(user));
+      if (token) localStorage.setItem('cf_token', token);
     } else {
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      localStorage.removeItem('cf_current_user');
+      localStorage.removeItem('cf_token');
     }
   }
 
-  getUsers(): User[] {
-    return JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
-  }
-
-  authenticate(email: string): User | null {
-    const users = this.getUsers();
-    return users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
-  }
-
-  registerUser(userData: Omit<User, 'id' | 'avatar'>): User | string {
-    const users = this.getUsers();
-    
-    // Check if email already exists
-    if (users.some(u => u.email.toLowerCase() === userData.email.toLowerCase())) {
-      return "An account with this email already exists.";
+  async authenticate(email: string): Promise<{user: User, token: string} | null> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: 'password' }) // Password handling is simulated
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
     }
+  }
 
-    const newUser: User = {
-      ...userData,
-      id: `u-${Math.random().toString(36).substr(2, 9)}`,
-      avatar: `https://picsum.photos/seed/${userData.name.split(' ')[0]}/200`
-    };
+  async registerUser(userData: Omit<User, 'id' | 'avatar'>): Promise<any> {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+    if (!res.ok) return (await res.json()).error;
+    return await res.json();
+  }
 
-    users.push(newUser);
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-    return newUser;
+  async getUsers(): Promise<User[]> {
+    // For admin panel: we'd need a specific endpoint, but using login/register as basis
+    const res = await fetch(`${API_BASE}/users`, { headers: this.getAuthHeader() });
+    return res.ok ? await res.json() : [];
   }
 
   // --- Attendance ---
-  getAttendance(userId?: string): AttendanceRecord[] {
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEYS.ATTENDANCE) || '[]');
-    if (userId) return all.filter((r: AttendanceRecord) => r.userId === userId);
-    return all;
+  async getAttendance(userId?: string): Promise<AttendanceRecord[]> {
+    const url = userId ? `${API_BASE}/attendance?userId=${userId}` : `${API_BASE}/attendance`;
+    const res = await fetch(url, { headers: this.getAuthHeader() });
+    return res.ok ? await res.json() : [];
   }
 
-  saveAttendance(record: AttendanceRecord) {
-    const all = this.getAttendance();
-    const index = all.findIndex(r => r.id === record.id);
-    if (index > -1) {
-      all[index] = record;
-    } else {
-      all.push(record);
-    }
-    localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(all));
+  async saveAttendance(record: AttendanceRecord) {
+    await fetch(`${API_BASE}/attendance`, {
+      method: 'POST',
+      headers: { ...this.getAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(record)
+    });
   }
 
-  getTodayRecord(userId: string): AttendanceRecord | undefined {
+  async getTodayRecord(userId: string): Promise<AttendanceRecord | undefined> {
+    const history = await this.getAttendance(userId);
     const today = new Date().toISOString().split('T')[0];
-    return this.getAttendance(userId).find(r => r.date === today);
+    return history.find(r => r.date === today);
   }
 
   // --- Leaves ---
-  getLeaves(userId?: string): LeaveRequest[] {
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEYS.LEAVES) || '[]');
-    if (userId) return all.filter((l: LeaveRequest) => l.userId === userId);
-    return all;
+  async getLeaves(userId?: string): Promise<LeaveRequest[]> {
+    const url = userId ? `${API_BASE}/leaves?userId=${userId}` : `${API_BASE}/leaves`;
+    const res = await fetch(url, { headers: this.getAuthHeader() });
+    return res.ok ? await res.json() : [];
   }
 
-  saveLeave(request: LeaveRequest) {
-    const all = this.getLeaves();
-    const index = all.findIndex(l => l.id === request.id);
-    if (index > -1) {
-      all[index] = request;
-    } else {
-      all.push(request);
-    }
-    localStorage.setItem(STORAGE_KEYS.LEAVES, JSON.stringify(all));
+  async saveLeave(request: LeaveRequest) {
+    await fetch(`${API_BASE}/leaves`, {
+      method: 'POST',
+      headers: { ...this.getAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(request)
+    });
   }
 
-  updateLeaveStatus(id: string, status: LeaveRequest['status']) {
-    const all = this.getLeaves();
-    const index = all.findIndex(l => l.id === id);
-    if (index > -1) {
-      all[index].status = status;
-      localStorage.setItem(STORAGE_KEYS.LEAVES, JSON.stringify(all));
-    }
+  async updateLeaveStatus(id: string, status: LeaveRequest['status']) {
+    await fetch(`${API_BASE}/leaves/${id}`, {
+      method: 'PATCH',
+      headers: { ...this.getAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
   }
 }
 
